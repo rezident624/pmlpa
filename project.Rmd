@@ -1,0 +1,134 @@
+---
+output: html_document
+---
+
+#Practical Machine Learning course
+
+##Prediction Assignment Writeup
+
+###Task description
+
+This is the "classe" variable in the training set. We may use any of the other variables to predict with.
+
+###Data preprocessing
+
+First, we need to load our data:
+
+```{r}
+library(caret)
+train <- read.csv('pml-training.csv')
+test <- read.csv('pml-testing.csv')
+```
+
+Second, we don't want to use all variables to build the model. Deleting variables with near zero variance may help.
+
+```{r}
+train <- train[!nearZeroVar(train, saveMetrics = TRUE)$nzv]
+```
+
+Third, we can delete variables that may be NA:
+
+```{r}
+names = character()
+for(name in colnames(train))
+{
+    if (sum(is.na(train[[name]])) == 0)
+    {
+        names = c(names, name)
+    }
+}
+train = train[names]
+```
+
+Let's look on variables names:
+
+```{r}
+colnames(train)
+```
+
+We see that first 5 variables is not important: timestamps and row number. We can delete it:
+
+```{r}
+train = train[6:ncol(train)]
+```
+
+Train and test data has different variable's types. Let's fix it:
+
+```{r}
+d = train[1:20,]
+for(i in colnames(d)[1:ncol(train)-1])
+{
+    for(j in 1:20)
+    {
+        d[[i]][j] = test[[i]][j]
+    }
+}
+test = d
+```
+
+###Training model
+
+We'll be use SVM (Support Vector Machine) machine learning algorithm with linear kernel implemented in e1071 R package. We need only one parameter to tweak: parameter C, that control regularization.
+
+First, load package and define function to persorm cross-validation:
+
+```{r}
+library(e1071)
+folds <- createFolds(train$classe, k = 4, returnTrain = TRUE)
+cv <- function(data, folds, cost){
+    accuracy = 0
+    for(i in 1:length(folds))
+    {
+        f <- folds[[i]]
+        Tr <- data[f,]
+        Te <- data[-f,]
+        m <- svm(classe~., data = Tr, cost = cost)
+        r <- predict(m, Te)
+        accuracy <- accuracy + sum(r == Te$classe) / length(Te$classe)
+    }
+    accuracy / length(folds)
+}
+```
+
+Second, calculate optimal value for C(cost) parameter:
+
+```{r}
+bestc = 1
+accuracy = 0
+c = c(1, 10, 100, 1000)
+for(cc in c){
+    acc <- cv(train, folds, cc)
+    if (acc > accuracy){
+        accuracy = acc
+        bestc = cc
+    }
+    print(paste('C = ', as.character(cc), ', accuracy = ', as.character(acc)))
+}
+```
+
+We get bestc value:
+
+```{r}
+bestc
+```
+
+And now we can train the model with optimal cost:
+
+```{r}
+model <- svm(classe~., data = train, cost = bestc)
+```
+
+With accuracy:
+
+```{r}
+accuracy
+```
+
+###Predicting
+
+Let's predict values for out test set with trained model:
+
+```{r}
+predict(model, test)
+```
+
